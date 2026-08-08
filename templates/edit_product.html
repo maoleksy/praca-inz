@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Edytuj produkt</h2>
+
+<form method="POST">
+    <label>Link do produktu:</label>
+    <input type="text" name="product_url" value="https://answear.com/p/{{ product.slug }}-{{ product.product_id }}" required>
+
+    <label>Rozmiary (oddzielone przecinkami):</label>
+    <input type="text" name="sizes" value="{{ sizes }}">
+
+    <button type="submit">Zapisz</button>
+</form>
+
+<a href="/products">⬅ Powrót</a>
+{% endblock %}

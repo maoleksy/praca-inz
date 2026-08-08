@@ -1,0 +1,28 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Wybierz sklep do monitorowania</h2>
+
+<div class="shop-list">
+
+    <div class="shop-item">
+        <h3>Answear</h3>
+        <p>Monitorowanie dostępności produktów z Answear.</p>
+        <a class="btn" href="/answear">Przejdź</a>
+    </div>
+
+    <div class="shop-item">
+        <h3>Zalando</h3>
+        <p>Monitorowanie produktów z Zalando.</p>
+        <a class="btn" href="/zalando">Przejdź</a>
+    </div>
+
+    <div class="shop-item">
+        <h3>Sizeer</h3>
+        <p>Sklep zostanie dodany wkrótce.</p>
+        <a class="btn disabled" href="#">Wkrótce</a>
+    </div>
+
+</div>
+
+{% endblock %}

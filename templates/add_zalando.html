@@ -1,0 +1,20 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Dodaj produkt z Zalando</h2>
+
+<form method="POST">
+    <label>URL produktu Zalando:</label><br>
+    <input type="text" name="product_url" placeholder="https://www.zalando.pl/..." required>
+    <br><br>
+
+    <label>Rozmiary do monitorowania (np. 41, 42, 43):</label><br>
+    <input type="text" name="sizes" placeholder="np. 37, 38, 39" required>
+    <br><br>
+
+    <button type="submit"> Dodaj produkt</button>
+</form>
+
+<br>
+<a href="/zalando">⬅ Powrót</a>
+{% endblock %}

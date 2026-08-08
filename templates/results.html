@@ -1,0 +1,41 @@
+{% extends "layout.html" %}
+
+{% block content %}
+<h2>Wynik monitoringu</h2>
+
+<table>
+    <tr>
+        <th>Foto</th>
+        <th>Nazwa</th>
+        <th>Rozmiar</th>
+        <th>Status</th>
+        <th>Link</th>
+    </tr>
+
+    {% for r in results %}
+    <tr>
+
+        <td>
+            {% if r.image_url %}
+                <img src="{{ r.image_url }}" width="80" style="border-radius:8px;">
+            {% endif %}
+        </td>
+
+        <td>{{ r.name }}</td>
+
+        <td>{{ r.size }}</td>
+
+        {% if "Dostępny" in r.readable %}
+            <td class="success">{{ r.readable }}</td>
+        {% else %}
+            <td class="error">{{ r.readable }}</td>
+        {% endif %}
+
+        <td><a href="{{ r.url }}" target="_blank">Otwórz</a></td>
+
+    </tr>
+    {% endfor %}
+</table>
+
+<a href="/">⬅ Powrót</a>
+{% endblock %}
