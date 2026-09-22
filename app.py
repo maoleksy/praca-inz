@@ -188,7 +188,13 @@ def edit_product(id):
         url = request.form["product_url"]
         sizes = [s.strip() for s in request.form["sizes"].split(",")]
 
-        product_id = extract_product_id(url)
+        cursor.execute("SELECT shop FROM products WHERE id=%s", (id,))
+        shop = cursor.fetchone()["shop"]
+
+        if shop == "zalando":
+            product_id = (url.split("-")[-2] + "-" + url.split("-")[-1].split(".")[0]).upper()
+        else:
+            product_id = extract_product_id(url)
 
         cursor.execute("""
             UPDATE products SET product_id=%s, url=%s WHERE id=%s
@@ -243,4 +249,4 @@ def check_now():
     return render_template("results.html", results=combined)
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5050)

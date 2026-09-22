@@ -137,28 +137,25 @@ class ZalandoScraper:
 
         size_map = {}
 
+        STOCK_STATUS_MAP = {
+            "OUT_OF_STOCK": "OOS",
+            "ONE": "ONE",
+            "TWO": "TWO",
+            "MANY": "MANY",
+        }
+
         for variant in product["simples"]:
             size = variant["size"]
-            qty_raw = variant["offer"]["stock"]["quantity"]
+            offer = variant.get("offer")
 
-            if qty_raw is None:
-                qty = 0
-            elif isinstance(qty_raw, int):
-                qty = qty_raw
-            else:
-                try:
-                    qty = int(qty_raw)
-                except:
-                    qty = 3
-
-            if qty == 0:
+            if not offer:
                 status = "OOS"
-            elif qty == 1:
-                status = "ONE"
-            elif qty == 2:
-                status = "TWO"
             else:
-                status = "MANY"
+                qty_raw = offer["stock"]["quantity"]
+                if isinstance(qty_raw, int):
+                    status = "OOS" if qty_raw == 0 else "ONE" if qty_raw == 1 else "TWO" if qty_raw == 2 else "MANY"
+                else:
+                    status = STOCK_STATUS_MAP.get(qty_raw, "OOS")
 
             size_map[size] = status
 
