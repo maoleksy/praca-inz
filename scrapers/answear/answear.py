@@ -10,7 +10,7 @@ HEADERS = {
     'X-Tamago-Device': 'iOS',
     'Accept-Language': 'pl-PL,pl;q=0.9',
     'X-Tamago-App': 'mobile',
-    'X-Tamago-Api-Version': '3.21',
+    'X-Tamago-Api-Version': '4.0',
     'User-Agent': 'iOS/3.0.2',
     'X-Device-Id': 'F07E779F-E0CB-44A5-BF8B-7D32328358DC',
     'X-Tamago-Locale': 'pl',
