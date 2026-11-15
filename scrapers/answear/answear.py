@@ -18,6 +18,13 @@ HEADERS = {
 }
 
 
+def format_price(value):
+    try:
+        return f"{float(value):,.2f} zł".replace(",", " ").replace(".", ",")
+    except (TypeError, ValueError):
+        return None
+
+
 class AnswearScraper:
 
     BASE_URL = "https://api.answear.com/api/front/product"
@@ -78,7 +85,8 @@ class AnswearScraper:
                         "availability": sz["variation"]["availability"],
                         "product_name": product["name"],
                         "slug": product["slug"],
-                        "image_url": product["image_url"]
+                        "image_url": product["image_url"],
+                        "price": format_price(product.get("price")),
                     })
 
         return results

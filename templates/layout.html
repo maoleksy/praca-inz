@@ -2,12 +2,32 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <title>Monitoring Answear</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Stock Monitor{% endblock %}</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👟</text></svg>">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v=2">
 </head>
 <body>
-    <div class="container">
-        {% block content %}{% endblock %}
+<header class="topbar">
+    <div class="topbar-inner">
+        <a class="brand" href="{{ url_for('index') }}"><i class="brand-dot"></i><span>Stock Monitor</span></a>
+        <nav class="nav">
+            <a href="{{ url_for('index') }}" class="{{ 'active' if nav == 'index' }}">Pulpit</a>
+            <a href="{{ url_for('products') }}" class="{{ 'active' if nav == 'products' }}">Produkty</a>
+            <a href="{{ url_for('alerts') }}" class="{{ 'active' if nav == 'alerts' }}">Alerty</a>
+            <a href="{{ url_for('bestsecret_token') }}" class="{{ 'active' if nav == 'bestsecret_token' }}">Token</a>
+        </nav>
+        <a class="btn btn-primary btn-sm" href="{{ url_for('add_product') }}">+ Dodaj</a>
     </div>
+</header>
+
+<main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="flash flash-{{ category if category in ['success','error','info'] else 'info' }}">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</main>
 </body>
 </html>

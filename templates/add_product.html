@@ -1,15 +1,65 @@
-<form method="POST">
-    <label>Sklep:</label>
-    <select name="shop">
-        <option value="answear">Answear</option>
-        <option value="zalando">Zalando</option>
-    </select>
+{% extends "layout.html" %}
+{% block title %}Dodaj produkt · Stock Monitor{% endblock %}
 
-    <label>Link do produktu:</label>
-    <input type="text" name="product_url" autocomplete="off" required>
+{% block content %}
+<div class="narrow">
+    <div class="page-head">
+        <div>
+            <h1>Dodaj produkt</h1>
+            <p class="sub">Wklej link z Answear, Zalando albo BestSecret. Sklep rozpoznam sam.</p>
+        </div>
+    </div>
 
-    <label>Rozmiary (np. 40, 41, 42):</label>
-    <input type="text" name="sizes" required>
+    {% if error %}<div class="flash flash-error">{{ error }}</div>{% endif %}
 
-    <button type="submit">Dodaj</button>
-</form>
+    <form class="card form" method="POST" onsubmit="this.querySelector('button[type=submit]').textContent='Pobieram produkt…'">
+        <div class="field">
+            <label for="product_url">Link do produktu</label>
+            <input id="product_url" type="text" name="product_url" value="{{ form.product_url }}" placeholder="https://…" autocomplete="off" required autofocus>
+            <div class="detected" id="detected"></div>
+        </div>
+
+        <div class="field">
+            <label for="sizes">Rozmiary</label>
+            <input id="sizes" type="text" name="sizes" value="{{ form.sizes }}" placeholder="np. 36-40 albo 37, 38, 39" autocomplete="off" required>
+            <div class="size-presets">
+                <button class="btn btn-sm" type="button" data-sizes="36-40">36–40</button>
+                <button class="btn btn-sm" type="button" data-sizes="37-39">37–39</button>
+                <button class="btn btn-sm" type="button" data-sizes="40-45">40–45</button>
+                <button class="btn btn-sm" type="button" data-sizes="42-46">42–46</button>
+            </div>
+            <div class="hint">Zakres „36-40” rozwinie się w 36, 37, 38, 39, 40. Jeśli rozmiar trafi na stan od razu, dostaniesz alert.</div>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Dodaj do monitora</button>
+            <a class="btn btn-ghost" href="{{ url_for('products') }}">Anuluj</a>
+        </div>
+    </form>
+</div>
+
+<script>
+(function () {
+    var shops = [
+        ["answear", "Answear", "#17171a"],
+        ["zalando", "Zalando", "#ff6900"],
+        ["bestsecret", "BestSecret", "#b8954f"]
+    ];
+    var url = document.getElementById("product_url");
+    var out = document.getElementById("detected");
+    function detect() {
+        var v = url.value.toLowerCase();
+        if (!v) { out.textContent = ""; return; }
+        var hit = shops.find(function (s) { return v.indexOf(s[0]) !== -1; });
+        out.innerHTML = hit
+            ? '<i class="shop-swatch" style="background:' + hit[2] + '"></i>' + hit[1]
+            : '<span style="color:var(--danger)">Nieobsługiwany sklep</span>';
+    }
+    url.addEventListener("input", detect);
+    detect();
+    document.querySelectorAll("[data-sizes]").forEach(function (b) {
+        b.addEventListener("click", function () { document.getElementById("sizes").value = b.dataset.sizes; });
+    });
+})();
+</script>
+{% endblock %}

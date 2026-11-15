@@ -1,6 +1,9 @@
 # services/notifier.py
+import html
 import os
 import time
+from datetime import datetime, timezone
+
 import requests
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -12,6 +15,15 @@ DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 ERROR_COOLDOWN_SECONDS = 600
 _last_error_sent = {}
 
+SHOPS = {
+    "answear": {"name": "Answear", "color": 0x111111, "icon": "https://www.google.com/s2/favicons?domain=answear.com&sz=64"},
+    "zalando": {"name": "Zalando", "color": 0xFF6900, "icon": "https://www.google.com/s2/favicons?domain=zalando.pl&sz=64"},
+    "bestsecret": {"name": "BestSecret", "color": 0xC8A96A, "icon": "https://www.google.com/s2/favicons?domain=bestsecret.com&sz=64"},
+}
+COLOR_ERROR = 0xE5484D
+
+
+# ---------- niskopoziomowe wysyłki ----------
 
 def telegram(msg):
     if not BOT_TOKEN or not CHAT_ID:
@@ -23,18 +35,94 @@ def telegram(msg):
         print(f"[NOTIFIER] Telegram error: {e}")
 
 
-def discord(msg):
+def telegram_photo(caption_html, image_url, button_url=None):
+    """Zdjęcie z podpisem i przyciskiem; bez zdjęcia albo gdy Telegram go nie
+    pobierze, wysyła sam tekst."""
+    if not BOT_TOKEN or not CHAT_ID:
+        return
+    markup = {"inline_keyboard": [[{"text": "🛒 Otwórz w sklepie", "url": button_url}]]} if button_url else None
+    base = f"https://api.telegram.org/bot{BOT_TOKEN}"
+    try:
+        if image_url:
+            r = requests.post(f"{base}/sendPhoto", json={
+                "chat_id": CHAT_ID, "photo": image_url, "caption": caption_html,
+                "parse_mode": "HTML", "reply_markup": markup,
+            }, timeout=15)
+            if r.ok:
+                return
+        requests.post(f"{base}/sendMessage", json={
+            "chat_id": CHAT_ID, "text": caption_html, "parse_mode": "HTML",
+            "reply_markup": markup,
+        }, timeout=10)
+    except Exception as e:
+        print(f"[NOTIFIER] Telegram error: {e}")
+
+
+def discord(msg=None, embeds=None):
     if not DISCORD_WEBHOOK:
         return
+    payload = {"username": "Stock Monitor"}
+    if msg:
+        payload["content"] = msg
+    if embeds:
+        payload["embeds"] = embeds
     try:
-        requests.post(DISCORD_WEBHOOK, json={"content": msg}, timeout=10)
+        requests.post(DISCORD_WEBHOOK, json=payload, timeout=10)
     except Exception as e:
         print(f"[NOTIFIER] Discord error: {e}")
 
 
+# ---------- alerty ----------
+
 def send_alert(msg):
+    """Zwykły tekst (zostawione dla zgodności)."""
     telegram(msg)
     discord(msg)
+
+
+def send_product_alert(shop, name, size, status, url, image_url=None, price=None,
+                       new_product=False, test=False):
+    """Alert o dostępności: embed ze zdjęciem na Discordzie, zdjęcie z
+    podpisem i przyciskiem na Telegramie, wpis w historii alertów."""
+    meta = SHOPS.get(shop, {"name": shop.title(), "color": 0x5865F2, "icon": None})
+    headline = "🆕 Nowy produkt dostępny" if new_product else "🔥 Wrócił na stan"
+    if test:
+        headline = "🧪 Test alertu"
+
+    fields = [
+        {"name": "Rozmiar", "value": f"**{size}**", "inline": True},
+        {"name": "Status", "value": status, "inline": True},
+    ]
+    if price:
+        fields.append({"name": "Cena", "value": price, "inline": True})
+
+    author = {"name": f"{meta['name']} · {headline}"}
+    if meta["icon"]:
+        author["icon_url"] = meta["icon"]
+    embed = {
+        "author": author,
+        "title": name[:250],
+        "url": url,
+        "color": meta["color"],
+        "fields": fields,
+        "footer": {"text": "Stock Monitor"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    if image_url:
+        embed["image"] = {"url": image_url}
+    discord(embeds=[embed])
+
+    caption = (
+        f"<b>{html.escape(headline)}</b> · {html.escape(meta['name'])}\n"
+        f"{html.escape(name)}\n\n"
+        f"📏 Rozmiar: <b>{html.escape(str(size))}</b>\n"
+        f"📦 Status: {html.escape(status)}"
+        + (f"\n💰 Cena: {html.escape(price)}" if price else "")
+    )
+    telegram_photo(caption, image_url, url)
+
+    if not test:
+        _log_alert(shop, name, size, status, url, image_url, price)
 
 
 def send_error_alert(context, error):
@@ -47,4 +135,49 @@ def send_error_alert(context, error):
         return
 
     _last_error_sent[key] = now
-    send_alert(f"⚠️ BŁĄD [{context}]\n{type(error).__name__}: {error}")
+    text = f"{type(error).__name__}: {error}"
+    discord(embeds=[{
+        "title": f"⚠️ Błąd: {context}"[:250],
+        "description": f"```{text[:3900]}```",
+        "color": COLOR_ERROR,
+        "footer": {"text": "Kolejny taki sam błąd najwcześniej za 10 min"},
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }])
+    telegram(f"⚠️ BŁĄD [{context}]\n{text}")
+
+
+# ---------- historia ----------
+
+def ensure_alert_log(cursor):
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS alert_log (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            shop VARCHAR(20) NOT NULL,
+            name VARCHAR(200),
+            size VARCHAR(10),
+            status VARCHAR(30),
+            url VARCHAR(500),
+            image_url VARCHAR(500),
+            price VARCHAR(30),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            KEY idx_created (created_at)
+        ) DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+
+def _log_alert(shop, name, size, status, url, image_url, price):
+    try:
+        from database import get_connection
+        conn = get_connection()
+        cur = conn.cursor()
+        ensure_alert_log(cur)
+        cur.execute(
+            "INSERT INTO alert_log (shop, name, size, status, url, image_url, price) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+            (shop, (name or "")[:200], str(size)[:10], (status or "")[:30], (url or "")[:500],
+             (image_url or "")[:500], (price or "")[:30]),
+        )
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[NOTIFIER] alert_log error: {e}")

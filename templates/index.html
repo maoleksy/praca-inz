@@ -1,34 +1,83 @@
 {% extends "layout.html" %}
+{% block title %}Pulpit · Stock Monitor{% endblock %}
 
 {% block content %}
-<h2>Wybierz sklep do monitorowania</h2>
-
-<div class="shop-list">
-
-    <div class="shop-item">
-        <h3>Answear</h3>
-        <p>Monitorowanie dostępności produktów z Answear.</p>
-        <a class="btn" href="/answear">Przejdź</a>
+<div class="page-head">
+    <div>
+        <h1>Pulpit</h1>
+        <p class="sub">Answear co 30 s, Zalando i BestSecret co 60 s. Alert przychodzi na Discord i Telegram.</p>
     </div>
-
-    <div class="shop-item">
-        <h3>Zalando</h3>
-        <p>Monitorowanie produktów z Zalando.</p>
-        <a class="btn" href="/zalando">Przejdź</a>
+    <div class="actions">
+        <form class="inline" method="POST" action="{{ url_for('test_alert') }}">
+            <button class="btn" type="submit">🧪 Testowy alert</button>
+        </form>
+        <a class="btn" href="{{ url_for('check_now') }}" onclick="this.textContent='Sprawdzam…';this.setAttribute('disabled','')">↻ Sprawdź teraz</a>
     </div>
-
-    <div class="shop-item">
-        <h3>BestSecret</h3>
-        <p>Monitorowanie produktów z BestSecret (wymaga tokena konta).</p>
-        <a class="btn" href="/bestsecret">Przejdź</a>
-    </div>
-
-    <div class="shop-item">
-        <h3>Sizeer</h3>
-        <p>Sklep zostanie dodany wkrótce.</p>
-        <a class="btn disabled" href="#">Wkrótce</a>
-    </div>
-
 </div>
 
+<div class="grid grid-4">
+    <div class="card stat"><div class="value">{{ stats.products }}</div><div class="label">monitorowanych produktów</div></div>
+    <div class="card stat"><div class="value">{{ stats.sizes }}</div><div class="label">rozmiarów pod obserwacją</div></div>
+    <div class="card stat {{ 'highlight' if stats.available }}"><div class="value">{{ stats.available }}</div><div class="label">rozmiarów na stanie teraz</div></div>
+    <div class="card stat"><div class="value">{{ alerts | length }}</div><div class="label">ostatnich alertów</div></div>
+</div>
+
+<div class="section">
+    <h2>Sklepy</h2>
+    <div class="grid grid-3">
+        {% for key, shop in SHOPS.items() %}
+        {% set h = health.get(key) %}
+        <div class="card health">
+            <div class="health-head">
+                <a class="shop-name" href="{{ url_for('products', shop=key) }}" style="text-decoration:none"><i class="shop-swatch sw-{{ key }}"></i>{{ shop.name }}</a>
+                {% if not h %}
+                    <span class="pill pill-idle">czeka na 1. sprawdzenie</span>
+                {% elif h.level == 'ok' %}
+                    <span class="pill pill-ok">działa</span>
+                {% elif h.level == 'down' %}
+                    <span class="pill pill-down">nie działa</span>
+                {% else %}
+                    <span class="pill pill-warn">problemy</span>
+                {% endif %}
+            </div>
+            <div class="muted small">
+                {{ stats.per_shop[key] }} prod. · co {{ intervals[key] }} s
+                {% if h %} · ostatnio OK {{ h.ok_ago | ago }}{% endif %}
+            </div>
+            {% if key == 'bestsecret' %}
+                <div class="muted small">
+                    {% if not token %}⚠️ brak tokena
+                    {% elif token.has_refresh %}🔑 token odświeżany automatycznie
+                    {% elif token.expires_at > now %}🔑 token ważny {{ ((token.expires_at - now) / 60) | int }} min, brak refresh tokena
+                    {% else %}⚠️ token wygasł{% endif %}
+                </div>
+            {% endif %}
+            {% if h and h.failed %}<div class="err">{{ h.failed }}/{{ h.checked }} produktów z błędem: {{ h.last_error }}</div>{% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="section grid grid-2">
+    <div>
+        <div class="section-head"><h2>Na stanie teraz</h2><a href="{{ url_for('products') }}">wszystkie produkty →</a></div>
+        {% if in_stock %}
+            <div class="products">
+                {% for p in in_stock %}{% set show_actions = false %}{% include "_product_card.html" %}{% endfor %}
+            </div>
+        {% else %}
+            <div class="card empty"><div class="icon">🕵️</div>Żaden obserwowany rozmiar nie jest teraz dostępny.<br>Dam znać, jak tylko coś wpadnie.</div>
+        {% endif %}
+    </div>
+    <div>
+        <div class="section-head"><h2>Ostatnie alerty</h2><a href="{{ url_for('alerts') }}">historia →</a></div>
+        <div class="card">
+            {% if alerts %}
+                <div class="feed">{% for a in alerts %}{% include "_alert_item.html" %}{% endfor %}</div>
+            {% else %}
+                <div class="empty"><div class="icon">🔔</div>Jeszcze nic. Pierwszy alert pojawi się tutaj.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
 {% endblock %}

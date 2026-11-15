@@ -1,0 +1,12 @@
+{# Wiersz historii alertów; oczekuje zmiennej a #}
+<a class="feed-item" href="{{ a.url }}" target="_blank" rel="noopener">
+    {% if a.image_url %}<img src="{{ a.image_url }}" alt="" loading="lazy">{% else %}<div class="ph"></div>{% endif %}
+    <div class="feed-main">
+        <div class="feed-title">{{ a.name }}</div>
+        <div class="feed-meta">
+            <span class="shop-swatch sw-{{ a.shop }}"></span>
+            {{ SHOPS[a.shop].name if a.shop in SHOPS else a.shop }} · rozm. <b>{{ a.size }}</b> · {{ a.status }}{% if a.price %} · {{ a.price }}{% endif %}
+        </div>
+    </div>
+    <div class="feed-meta">{{ a.age | ago }}</div>
+</a>

@@ -1,14 +1,10 @@
-# services/monitor.py
+# scrapers/answear/monitor.py
 from scrapers.answear.answear import AnswearScraper
-from services.notifier import send_alert, send_error_alert
+from services import health
+from services.notifier import send_product_alert, send_error_alert
+from services.statuses import label
 from database import get_connection
 
-STATUS_LABELS = {
-    "IN_STOCK": "Dostępny ✔",
-    "LAST": "Ostatnia sztuka! 🔥",
-    "LOW_STOCK": "Mało sztuk ⚠️",
-    "OUT_OF_STOCK": "Brak ✘"
-}
 
 def is_available(status: str):
     return status in ("IN_STOCK", "LAST", "LOW_STOCK")
@@ -33,6 +29,8 @@ def monitor_from_db(return_data=False):
         return [] if return_data else None
 
     output = []
+    failed = 0
+    last_error = None
 
     for p in products:
         product_id = p["product_id"]
@@ -50,6 +48,8 @@ def monitor_from_db(return_data=False):
         except Exception as e:
             print(f"[ERROR] API error for product {product_id}: {e}")
             send_error_alert(f"Answear produkt {product_id}", e)
+            failed += 1
+            last_error = e
             continue
 
         for state in states:
@@ -57,15 +57,14 @@ def monitor_from_db(return_data=False):
 
             old_status = size_info["last_status"]
             new_status = state["availability"]
+            url = f"https://answear.com/p/{state['slug']}-{product_id}"
 
             # alert tylko kiedy zmiana na "jest dostępny"
             if old_status != new_status and is_available(new_status):
-                url = f"https://answear.com/p/{state['slug']}-{product_id}"
-                msg = (
-                    f"🔥 {state['product_name']} ({state['size']}) — "
-                    f"{STATUS_LABELS[new_status]}\n{url}"
+                send_product_alert(
+                    "answear", state["product_name"], state["size"], label(new_status),
+                    url, state.get("image_url"), state.get("price"),
                 )
-                send_alert(msg)
 
             # update statusu w DB
             cur3 = conn.cursor()
@@ -81,10 +80,11 @@ def monitor_from_db(return_data=False):
                 "name": state["product_name"],
                 "size": state["size"],
                 "availability": new_status,
-                "readable": STATUS_LABELS.get(new_status, new_status),
-                "url": f"https://answear.com/p/{state['slug']}-{product_id}",
+                "readable": label(new_status),
+                "url": url,
                 "image_url": state.get("image_url"),
             })
 
     conn.close()
+    health.record("answear", len(products), failed, last_error)
     return output if return_data else None

@@ -1,59 +1,41 @@
 {% extends "layout.html" %}
+{% block title %}Produkty · Stock Monitor{% endblock %}
 
 {% block content %}
-<h2>Monitorowane produkty</h2>
+<div class="page-head">
+    <div>
+        <h1>Produkty</h1>
+        <p class="sub">{{ products | length }} {{ 'produkt' if products | length == 1 else 'produktów' }}{% if shop %} w {{ SHOPS[shop].name if shop in SHOPS else shop }}{% endif %}. Dostępne są na górze.</p>
+    </div>
+    <a class="btn btn-primary" href="{{ url_for('add_product') }}">+ Dodaj produkt</a>
+</div>
 
-<a href="/add"> Dodaj produkt (Answear)</a><br>
-<a href="/add_zalando"> Dodaj produkt (Zalando)</a><br>
-<a href="/add_bestsecret"> Dodaj produkt (BestSecret)</a><br><br>
+<form class="toolbar" method="GET">
+    <div class="chips">
+        <a class="chip {{ 'active' if not shop }}" href="{{ url_for('products', q=q or None) }}">Wszystkie</a>
+        {% for key, s in SHOPS.items() %}
+            <a class="chip {{ 'active' if shop == key }}" href="{{ url_for('products', shop=key, q=q or None) }}">{{ s.name }}</a>
+        {% endfor %}
+    </div>
+    {% if shop %}<input type="hidden" name="shop" value="{{ shop }}">{% endif %}
+    <input class="search" type="search" name="q" value="{{ q }}" placeholder="Szukaj po nazwie lub ID…">
+</form>
 
-<table>
-    <tr>
-        <th>Foto</th>
-        <th>ID</th>
-        <th>Nazwa</th>
-        <th>Rozmiary</th>
-        <th>Statusy</th>
-        <th>Sklep</th>
-        <th>Akcje</th>
-    </tr>
-
-    {% for p in products %}
-    <tr>
-        <td>
-            {% if p.image_url %}
-                <img src="{{ p.image_url }}" width="80" style="border-radius:8px;">
-            {% else %}
-                Brak
-            {% endif %}
-        </td>
-
-        <td>{{ p.product_id }}</td>
-        <td>{{ p.name }}</td>
-        <td>{{ p.sizes }}</td>
-        <td>{{ p.statuses }}</td>
-
-        <td>
-            {% if p.shop == "answear" %}
-                 Answear
-            {% elif p.shop == "zalando" %}
-                 Zalando
-            {% elif p.shop == "bestsecret" %}
-                 BestSecret
-            {% else %}
-                 Unknown
-            {% endif %}
-        </td>
-
-        <td>
-            <a href="/edit/{{ p.id }}">✏ Edytuj</a>
-            <form method="POST" action="/delete/{{ p.id }}" style="display:inline;">
-                <button type="submit">🗑 Usuń</button>
-            </form>
-        </td>
-    </tr>
-    {% endfor %}
-</table>
-
-<a href="/">⬅ Powrót</a>
+{% if products %}
+    <div class="products">
+        {% for p in products %}{% set show_actions = true %}{% include "_product_card.html" %}{% endfor %}
+    </div>
+    <div class="legend">
+        <span><b class="size available">40</b> dostępny</span>
+        <span><b class="size low">40</b> mało / ostatnia sztuka</span>
+        <span><b class="size out">40</b> brak</span>
+        <span><b class="size unknown">40</b> sklep nie ma tego rozmiaru / jeszcze nie sprawdzono</span>
+    </div>
+{% else %}
+    <div class="card empty">
+        <div class="icon">👟</div>
+        {% if q or shop %}Nic nie pasuje do filtrów.{% else %}Nie monitorujesz jeszcze żadnego produktu.{% endif %}
+        <div style="margin-top:12px"><a class="btn btn-primary" href="{{ url_for('add_product') }}">+ Dodaj pierwszy</a></div>
+    </div>
+{% endif %}
 {% endblock %}

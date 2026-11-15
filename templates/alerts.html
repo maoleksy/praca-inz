@@ -1,0 +1,22 @@
+{% extends "layout.html" %}
+{% block title %}Alerty · Stock Monitor{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Historia alertów</h1>
+        <p class="sub">Ostatnie 100 powiadomień o dostępności, wysłanych na Discord i Telegram.</p>
+    </div>
+    <form class="inline" method="POST" action="{{ url_for('test_alert') }}">
+        <button class="btn" type="submit">🧪 Testowy alert</button>
+    </form>
+</div>
+
+<div class="card">
+    {% if alerts %}
+        <div class="feed">{% for a in alerts %}{% include "_alert_item.html" %}{% endfor %}</div>
+    {% else %}
+        <div class="empty"><div class="icon">🔔</div>Historia zapisuje się od teraz. Pierwszy alert pojawi się tutaj.</div>
+    {% endif %}
+</div>
+{% endblock %}

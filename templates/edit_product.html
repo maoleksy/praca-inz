@@ -1,17 +1,32 @@
 {% extends "layout.html" %}
+{% block title %}Edytuj · Stock Monitor{% endblock %}
 
 {% block content %}
-<h2>Edytuj produkt</h2>
+<div class="narrow">
+    <div class="page-head">
+        <div>
+            <h1>Edytuj produkt</h1>
+            <p class="sub">{{ SHOPS[product.shop].name if product.shop in SHOPS else product.shop }} · {{ product.name }}</p>
+        </div>
+    </div>
 
-<form method="POST">
-    <label>Link do produktu:</label>
-    <input type="text" name="product_url" value="{{ product.url }}" autocomplete="off" required>
-
-    <label>Rozmiary (oddzielone przecinkami):</label>
-    <input type="text" name="sizes" value="{{ sizes }}">
-
-    <button type="submit">Zapisz</button>
-</form>
-
-<a href="/products">⬅ Powrót</a>
+    <form class="card form" method="POST">
+        {% if product.image_url %}
+            <img src="{{ product.image_url }}" alt="" style="width:120px;height:120px;object-fit:contain;background:#fff;border-radius:12px;border:1px solid var(--border)">
+        {% endif %}
+        <div class="field">
+            <label for="product_url">Link do produktu</label>
+            <input id="product_url" type="text" name="product_url" value="{{ product.url }}" autocomplete="off" required>
+        </div>
+        <div class="field">
+            <label for="sizes">Rozmiary</label>
+            <input id="sizes" type="text" name="sizes" value="{{ sizes }}" autocomplete="off">
+            <div class="hint">Oddziel przecinkami albo podaj zakres, np. 36-40. Zapisane statusy zostają, więc edycja nie wyśle fali alertów.</div>
+        </div>
+        <div class="actions">
+            <button class="btn btn-primary" type="submit">Zapisz</button>
+            <a class="btn btn-ghost" href="{{ url_for('products') }}">Anuluj</a>
+        </div>
+    </form>
+</div>
 {% endblock %}

@@ -50,6 +50,11 @@ class BestSecretAuthError(Exception):
     pass
 
 
+class ProductGone(Exception):
+    """BestSecret zdjął produkt/kolor ze sprzedaży (zwykle wyprzedany);
+    bywa, że wraca, więc monitorujemy dalej."""
+
+
 def _jwt_exp(token):
     try:
         payload = token.split(".")[1]
@@ -195,6 +200,11 @@ class BestSecretScraper:
 
         data = body.get("data") or {}
         product = data.get("product")
+        if not product and any(
+            "NOT_FOUND" in str((e.get("extensions") or {}).get("code", ""))
+            for e in body.get("errors") or []
+        ):
+            raise ProductGone(f"{self.code}/{self.color}")
         if not product:
             raise RuntimeError(f"BestSecret nie zwrócił produktu {self.code}/{self.color}: {body.get('errors')}")
 

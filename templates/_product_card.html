@@ -1,0 +1,32 @@
+{# Karta produktu; oczekuje zmiennej p #}
+<article class="product {{ 'has-stock' if p.available }}">
+    <a class="product-media" href="{{ p.url }}" target="_blank" rel="noopener">
+        {% if p.image_url %}
+            <img src="{{ p.image_url }}" alt="" loading="lazy">
+        {% else %}
+            <div class="noimg">brak zdjęcia</div>
+        {% endif %}
+        <span class="shop-badge {{ p.shop }}">{{ SHOPS[p.shop].name if p.shop in SHOPS else p.shop }}</span>
+        {% if p.available %}<span class="stock-badge">Na stanie: {{ p.available | length }}</span>{% endif %}
+    </a>
+    <div class="product-body">
+        <a class="product-title" href="{{ p.url }}" target="_blank" rel="noopener">{{ p.name or 'Bez nazwy' }}</a>
+        <div class="product-id">{{ p.product_id }}</div>
+        <div class="sizes">
+            {% for s in p.sizes %}
+                <span class="size {{ s.last_status | status_css }}" title="{{ s.size }}: {{ s.last_status | status_label }}">{{ s.size }}</span>
+            {% else %}
+                <span class="muted small">Brak rozmiarów</span>
+            {% endfor %}
+        </div>
+        {% if show_actions %}
+        <div class="product-foot">
+            <a class="btn btn-sm grow" href="{{ p.url }}" target="_blank" rel="noopener">Otwórz ↗</a>
+            <a class="btn btn-sm" href="{{ url_for('edit_product', id=p.id) }}" title="Edytuj">✏️</a>
+            <form class="inline" method="POST" action="{{ url_for('delete_product', id=p.id) }}" onsubmit="return confirm('Usunąć {{ (p.name or '') | replace("'", "") }} z monitora?')">
+                <button class="btn btn-sm btn-danger" type="submit" title="Usuń">🗑</button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+</article>
