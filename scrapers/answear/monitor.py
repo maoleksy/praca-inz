@@ -1,6 +1,6 @@
 # services/monitor.py
 from scrapers.answear.answear import AnswearScraper
-from services.notifier import send_alert
+from services.notifier import send_alert, send_error_alert
 from database import get_connection
 
 STATUS_LABELS = {
@@ -15,13 +15,22 @@ def is_available(status: str):
 
 
 def monitor_from_db(return_data=False):
-    conn = get_connection()
+    conn = None
 
-    # --- Pobieramy TYLKO produkty Answear ---
-    cur1 = conn.cursor(dictionary=True)
-    cur1.execute("SELECT * FROM products WHERE shop = 'answear'")
-    products = cur1.fetchall()
-    cur1.close()
+    try:
+        conn = get_connection()
+
+        # --- Pobieramy TYLKO produkty Answear ---
+        cur1 = conn.cursor(dictionary=True)
+        cur1.execute("SELECT * FROM products WHERE shop = 'answear'")
+        products = cur1.fetchall()
+        cur1.close()
+    except Exception as e:
+        print(f"[ANSWEAR] Błąd inicjalizacji monitora: {e}")
+        send_error_alert("Answear monitor (DB/init)", e)
+        if conn is not None:
+            conn.close()
+        return [] if return_data else None
 
     output = []
 
@@ -40,6 +49,7 @@ def monitor_from_db(return_data=False):
             states = scraper.check_sizes()
         except Exception as e:
             print(f"[ERROR] API error for product {product_id}: {e}")
+            send_error_alert(f"Answear produkt {product_id}", e)
             continue
 
         for state in states:

@@ -4,7 +4,8 @@
 <h2>Monitorowane produkty</h2>
 
 <a href="/add"> Dodaj produkt (Answear)</a><br>
-<a href="/add_zalando"> Dodaj produkt (Zalando)</a><br><br>
+<a href="/add_zalando"> Dodaj produkt (Zalando)</a><br>
+<a href="/add_bestsecret"> Dodaj produkt (BestSecret)</a><br><br>
 
 <table>
     <tr>
@@ -37,6 +38,8 @@
                  Answear
             {% elif p.shop == "zalando" %}
                  Zalando
+            {% elif p.shop == "bestsecret" %}
+                 BestSecret
             {% else %}
                  Unknown
             {% endif %}

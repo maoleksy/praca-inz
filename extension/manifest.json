@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Zalando Cart Monitor",
+  "version": "1.0.0",
+  "description": "Dodaje do koszyka Zalando rozmiary wykryte jako dostępne przez monitor i otwiera koszyk z wpisanym kodem rabatowym.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": [
+    "https://www.zalando.pl/*",
+    "http://localhost:5050/*",
+    "http://51.255.34.32:5050/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Zalando Cart Monitor"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.zalando.pl/*"],
+      "js": ["config.js", "content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

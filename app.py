@@ -1,18 +1,40 @@
-from flask import Flask, render_template, request, redirect
+import mysql.connector
+from flask import Flask, render_template, request, redirect, jsonify
+from werkzeug.exceptions import HTTPException
 from database import get_connection
 from utils import extract_product_id
 from services.scheduler import start_scheduler
+from services.notifier import send_error_alert
 from scrapers.answear.monitor import monitor_from_db
 from scrapers.zalando.monitor import monitor_zalando
+from scrapers.bestsecret.monitor import monitor_bestsecret, status_for, is_available
+from scrapers.bestsecret.bestsecret import BestSecretScraper, normalize_size, save_tokens, token_status
 
 from scrapers.answear.answear import AnswearScraper
 from scrapers.zalando.zalando import ZalandoScraper
 import os
+import time
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
-scheduler = start_scheduler()
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    if isinstance(e, HTTPException):
+        return e
+    send_error_alert(f"Flask {request.path}", e)
+    raise e
+
+# Domyślnie debug jest WYŁĄCZONY (bezpieczne na VPS). Do lokalnego dev z
+# auto-restartem ustaw FLASK_DEBUG=1 w środowisku przed odpaleniem.
+DEBUG = os.getenv("FLASK_DEBUG", "0") == "1"
+
+# Gdy debug=True, Werkzeug importuje ten plik dwa razy (proces-obserwator +
+# proces potomny) — bez tej strażniczki scheduler startowałby dwukrotnie.
+# Gdy debug=False (VPS), reloadera nie ma, więc startujemy normalnie raz.
+if not DEBUG or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+    scheduler = start_scheduler()
 
 @app.route("/")
 def index():
@@ -73,16 +95,26 @@ def add_product():
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO products (product_id, name, slug, image_url, shop, url)
-            VALUES (%s, %s, %s, %s, 'answear', %s)
-        """, (
-            product_id,
-            product["name"],
-            product["slug"],
-            product["image_url"],
-            url
-        ))
+        try:
+            cursor.execute("""
+                INSERT INTO products (product_id, name, slug, image_url, shop, url)
+                VALUES (%s, %s, %s, %s, 'answear', %s)
+            """, (
+                product_id,
+                product["name"],
+                product["slug"],
+                product["image_url"],
+                url
+            ))
+        except mysql.connector.errors.IntegrityError:
+            cursor.execute(
+                "SELECT id FROM products WHERE product_id=%s AND shop='answear'",
+                (product_id,)
+            )
+            existing = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return redirect(f"/edit/{existing[0]}") if existing else redirect("/products")
 
         new_id = cursor.lastrowid
 
@@ -142,16 +174,28 @@ def add_product_zalando():
         conn = get_connection()
         cursor = conn.cursor()
 
-        cursor.execute("""
-            INSERT INTO products (product_id, name, slug, image_url, shop, url)
-            VALUES (%s, %s, %s, %s, 'zalando', %s)
-        """, (
-            product["product_id"],
-            product["name"],
-            product["name"].replace(" ", "-").lower(),
-            product["image_url"],
-            url
-        ))
+        try:
+            cursor.execute("""
+                INSERT INTO products (product_id, name, slug, image_url, shop, url)
+                VALUES (%s, %s, %s, %s, 'zalando', %s)
+            """, (
+                product["product_id"],
+                product["name"],
+                product["name"].replace(" ", "-").lower(),
+                product["image_url"],
+                url
+            ))
+        except mysql.connector.errors.IntegrityError:
+            # Ten produkt (SKU + shop) już jest monitorowany — nie zakładamy
+            # duplikatu, tylko odsyłamy do edycji istniejącego wpisu.
+            cursor.execute(
+                "SELECT id FROM products WHERE product_id=%s AND shop='zalando'",
+                (product["product_id"],)
+            )
+            existing = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return redirect(f"/edit/{existing[0]}") if existing else redirect("/products")
 
         new_id = cursor.lastrowid
 
@@ -179,6 +223,73 @@ def add_product_zalando():
 
     return render_template("add_zalando.html")
 
+@app.route("/bestsecret")
+def bestsecret_panel():
+    return render_template("bestsecret_menu.html", token=token_status(), now=int(time.time()))
+
+
+@app.route("/bestsecret/token", methods=["GET", "POST"])
+def bestsecret_token():
+    # Tokeny tylko zapisujemy, nigdy ich nie wyświetlamy.
+    if request.method == "POST":
+        save_tokens(request.form.get("access_token"), request.form.get("refresh_token"))
+        return redirect("/bestsecret")
+    return render_template("bestsecret_token.html", token=token_status(), now=int(time.time()))
+
+
+@app.route("/add_bestsecret", methods=["GET", "POST"])
+def add_product_bestsecret():
+    if request.method == "POST":
+        url = request.form["product_url"].strip()
+        sizes = [normalize_size(s) for s in request.form["sizes"].split(",") if s.strip()]
+
+        product = BestSecretScraper(url, sizes).fetch()
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute("""
+                INSERT INTO products (product_id, name, slug, image_url, shop, url)
+                VALUES (%s, %s, %s, %s, 'bestsecret', %s)
+            """, (
+                product["product_id"],
+                product["name"],
+                product["name"].replace(" ", "-").lower(),
+                product["image_url"],
+                url
+            ))
+        except mysql.connector.errors.IntegrityError:
+            cursor.execute(
+                "SELECT id FROM products WHERE product_id=%s AND shop='bestsecret'",
+                (product["product_id"],)
+            )
+            existing = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            return redirect(f"/edit/{existing[0]}") if existing else redirect("/products")
+
+        new_id = cursor.lastrowid
+
+        from services.notifier import send_alert
+        for size in sizes:
+            status = status_for(product["sizes"].get(size))
+            cursor.execute(
+                "INSERT INTO sizes (product_id, size, last_status) VALUES (%s, %s, %s)",
+                (new_id, size, status)
+            )
+            if is_available(status):
+                send_alert(f"BESTSECRET NOWY PRODUKT!\n{product['name']} ({size}) — {status}\n{url}")
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return redirect("/products")
+
+    return render_template("add_bestsecret.html")
+
+
 @app.route("/edit/<int:id>", methods=["GET", "POST"])
 def edit_product(id):
     conn = get_connection()
@@ -193,6 +304,10 @@ def edit_product(id):
 
         if shop == "zalando":
             product_id = (url.split("-")[-2] + "-" + url.split("-")[-1].split(".")[0]).upper()
+        elif shop == "bestsecret":
+            from scrapers.bestsecret.bestsecret import parse_url
+            product_id = "-".join(parse_url(url))
+            sizes = [normalize_size(s) for s in sizes]
         else:
             product_id = extract_product_id(url)
 
@@ -243,10 +358,60 @@ def delete_product(id):
 def check_now():
     answear_results = monitor_from_db(return_data=True)
     zalando_results = monitor_zalando(return_data=True)
+    bestsecret_results = monitor_bestsecret(return_data=True)
 
-    combined = answear_results + zalando_results
+    combined = answear_results + zalando_results + bestsecret_results
 
     return render_template("results.html", results=combined)
 
+
+@app.route("/api/cart-queue")
+def api_cart_queue():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT cq.id, cq.size, cq.status, cq.url, cq.created_at,
+               p.name AS product_name, p.product_id AS sku
+        FROM cart_queue cq
+        JOIN products p ON p.id = cq.product_id
+        WHERE cq.consumed = 0
+        ORDER BY cq.created_at ASC
+    """)
+    items = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    for item in items:
+        item["created_at"] = item["created_at"].isoformat()
+
+    return jsonify(items)
+
+
+@app.route("/api/cart-queue/ack", methods=["POST"])
+def api_cart_queue_ack():
+    data = request.get_json(silent=True) or {}
+    ids = data.get("ids", [])
+
+    if not ids:
+        return jsonify({"updated": 0})
+
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    placeholders = ", ".join(["%s"] * len(ids))
+    cursor.execute(
+        f"UPDATE cart_queue SET consumed = 1 WHERE id IN ({placeholders})",
+        tuple(ids)
+    )
+    updated = cursor.rowcount
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"updated": updated})
+
 if __name__ == "__main__":
-    app.run(debug=True, port=5050)
+    app.run(debug=DEBUG, host="0.0.0.0", port=5050)

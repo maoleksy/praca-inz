@@ -5,7 +5,7 @@
 
 <form method="POST">
     <label>Link do produktu:</label>
-    <input type="text" name="product_url" value="https://answear.com/p/{{ product.slug }}-{{ product.product_id }}" required>
+    <input type="text" name="product_url" value="{{ product.url }}" autocomplete="off" required>
 
     <label>Rozmiary (oddzielone przecinkami):</label>
     <input type="text" name="sizes" value="{{ sizes }}">

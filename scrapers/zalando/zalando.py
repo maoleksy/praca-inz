@@ -117,7 +117,12 @@ class ZalandoScraper:
         response = requests.post(
             "https://www.zalando.pl/api/graphql/mobile",
             headers=headers,
-            json=json_data
+            json=json_data,
+            timeout=15,
+            # Nagłówki podają się za aplikację iOS — bez impersonate TLS
+            # curl_cffi wysyła "gołą" sygnaturę JA3, łatwą do odfiltrowania
+            # jako bot (zwłaszcza z adresu IP datacenter/VPS).
+            impersonate="safari_ios",
         )
 
         data = safe_json_parse(response, "product details")
