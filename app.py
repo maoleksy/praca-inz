@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import mysql.connector
 from flask import Flask, flash, jsonify, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from database import get_connection
 from scrapers.answear.answear import AnswearScraper, format_price
@@ -25,6 +26,9 @@ from utils import extract_product_id
 
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY") or os.urandom(24)
+# Za nginx: https://apps.commitly.pl/products-monitoring wysyła X-Forwarded-Prefix,
+# więc url_for buduje linki z prefiksem; stary adres IP:5050 go nie wysyła.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 CHECK_INTERVALS = {"answear": 30, "zalando": 60, "bestsecret": 60}
 
@@ -242,9 +246,13 @@ def clean_url(shop, url):
     return url.split("?")[0].split("#")[0]
 
 
+@app.route("/add_zalando")
+@app.route("/add_bestsecret")
+def add_product_old():
+    return redirect(url_for("add_product"))
+
+
 @app.route("/add", methods=["GET", "POST"])
-@app.route("/add_zalando", methods=["GET", "POST"])
-@app.route("/add_bestsecret", methods=["GET", "POST"])
 def add_product():
     form = {"product_url": "", "sizes": ""}
     error = None
