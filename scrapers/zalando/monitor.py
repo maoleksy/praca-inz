@@ -81,6 +81,7 @@ def monitor_zalando(return_data=False):
                 send_product_alert(
                     "zalando", f"{fetched.get('brand') or ''} {fetched['name']}".strip(), size,
                     label(status), product["url"], fetched.get("image_url"),
+                    (fetched.get("prices") or {}).get(size),
                 )
 
             results.append({

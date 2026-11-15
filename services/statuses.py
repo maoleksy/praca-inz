@@ -19,6 +19,7 @@ _LABELS = {
     "TWO": ("2 sztuki", LOW),
     "ONE": ("Ostatnia sztuka", LOW),
     "OOS": ("Brak", OUT),
+    "PARTNER": ("Tylko partner (zawyżona cena)", OUT),
     # BestSecret: produkt/kolor zdjęty ze sprzedaży
     "GONE": ("Zdjęty ze sklepu", OUT),
 }

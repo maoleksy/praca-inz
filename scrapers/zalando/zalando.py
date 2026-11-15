@@ -149,6 +149,8 @@ class ZalandoScraper:
             "MANY": "MANY",
         }
 
+        price_map = {}
+
         for variant in product["simples"]:
             size = variant["size"]
             offer = variant.get("offer")
@@ -162,6 +164,17 @@ class ZalandoScraper:
                 else:
                     status = STOCK_STATUS_MAP.get(qty_raw, "OOS")
 
+                # Rozmiary od partnerów (np. "UNQ Store Warsaw") mają zawyżone
+                # ceny, więc dostępność liczy się tylko u Zalando.
+                label_kind = (offer.get("fulfillmentLabel") or {}).get("labelKind")
+                sold_by_partner = offer.get("isSoldByZalando") is False or label_kind == "PARTNER"
+                if status != "OOS" and sold_by_partner:
+                    status = "PARTNER"
+
+                amount = (offer.get("price") or {}).get("trackingCurrentAmount")
+                if amount is not None:
+                    price_map[size] = f"{float(amount):,.2f} zł".replace(",", " ").replace(".", ",")
+
             size_map[size] = status
 
         return {
@@ -169,7 +182,8 @@ class ZalandoScraper:
             "name": name,
             "slug": self.sku.lower(),
             "image_url": images[0] if images else None,
-            "sizes": size_map, 
+            "sizes": size_map,
+            "prices": price_map,
             "brand": brand,
             "gender": gender,
             "product_category": category,

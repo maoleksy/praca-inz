@@ -216,8 +216,9 @@ def fetch_for_add(shop, url, sizes):
     if shop == "zalando":
         product = ZalandoScraper(url, sizes).fetch()
         name = f"{product.get('brand') or ''} {product['name']}".strip()
+        # Cena per rozmiar (u Zalando każdy rozmiar może mieć inną).
         return (product["product_id"], name, product.get("image_url"),
-                {s: product["sizes"].get(s, "?") for s in sizes}, None)
+                {s: product["sizes"].get(s, "?") for s in sizes}, product.get("prices") or {})
     if shop == "bestsecret":
         try:
             parse_bestsecret_url(url)
@@ -284,7 +285,8 @@ def add_product():
                     (new_id, size, status),
                 )
                 if is_available(status):
-                    send_product_alert(shop, name, size, label(status), url, image_url, price, new_product=True)
+                    size_price = price.get(size) if isinstance(price, dict) else price
+                    send_product_alert(shop, name, size, label(status), url, image_url, size_price, new_product=True)
                 if shop == "zalando" and is_available(status):
                     cursor.execute(
                         "INSERT INTO cart_queue (product_id, size, status, url) VALUES (%s, %s, %s, %s)",
