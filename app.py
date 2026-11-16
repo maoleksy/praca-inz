@@ -16,7 +16,7 @@ from scrapers.bestsecret.bestsecret import (
     BestSecretScraper, ProductGone, normalize_size, parse_url as parse_bestsecret_url, save_tokens, token_status,
 )
 from scrapers.bestsecret.monitor import clean_price, monitor_bestsecret, status_for
-from scrapers.bestsecret.cart import CART_URL, cart_status, save_cart_settings, try_add_to_cart
+from scrapers.bestsecret.cart import CART_URL, cart_status, is_enabled as cart_enabled, save_cart_settings, try_add_to_cart
 from scrapers.zalando.monitor import monitor_zalando
 from scrapers.zalando.zalando import ZalandoScraper
 from services import health
@@ -208,7 +208,7 @@ def detect_shop(url):
 
 
 def fetch_for_add(shop, url, sizes):
-    """-> (product_id, name, image_url, {size: status}, price)"""
+    """-> (product_id, name, image_url, {size: status}, price, {size: variant_code})"""
     if shop == "answear":
         try:
             product_id = extract_product_id(url.split("?")[0])
@@ -217,13 +217,13 @@ def fetch_for_add(shop, url, sizes):
         product = AnswearScraper(product_id, sizes).fetch()
         statuses = {e["name"]: e["variation"]["availability"] for e in product.get("allSizes", [])}
         return (str(product_id), product["name"], product.get("image_url"),
-                {s: statuses.get(s, "?") for s in sizes}, format_price(product.get("price")))
+                {s: statuses.get(s, "?") for s in sizes}, format_price(product.get("price")), {})
     if shop == "zalando":
         product = ZalandoScraper(url, sizes).fetch()
         name = f"{product.get('brand') or ''} {product['name']}".strip()
         # Cena per rozmiar (u Zalando każdy rozmiar może mieć inną).
         return (product["product_id"], name, product.get("image_url"),
-                {s: product["sizes"].get(s, "?") for s in sizes}, product.get("prices") or {})
+                {s: product["sizes"].get(s, "?") for s in sizes}, product.get("prices") or {}, {})
     if shop == "bestsecret":
         try:
             parse_bestsecret_url(url)
@@ -234,7 +234,8 @@ def fetch_for_add(shop, url, sizes):
         except ProductGone:
             raise AddError("BestSecret nie ma teraz tego produktu (zdjęty ze sprzedaży albo zły kolor).")
         return (product["product_id"], product["name"], product.get("image_url"),
-                {s: status_for(product["sizes"].get(s)) for s in sizes}, clean_price(product.get("price")))
+                {s: status_for(product["sizes"].get(s)) for s in sizes}, clean_price(product.get("price")),
+                product.get("variants") or {})
     raise AddError("Nieznany sklep")
 
 
@@ -265,7 +266,7 @@ def add_product():
             sizes = parse_sizes(form["sizes"], normalize_size)
             if not sizes:
                 raise AddError("Podaj przynajmniej jeden rozmiar.")
-            product_id, name, image_url, statuses, price = fetch_for_add(shop, url, sizes)
+            product_id, name, image_url, statuses, price, variants = fetch_for_add(shop, url, sizes)
         except AddError as e:
             error = str(e)
         except Exception as e:
@@ -295,7 +296,12 @@ def add_product():
                 )
                 if is_available(status):
                     size_price = price.get(size) if isinstance(price, dict) else price
-                    send_product_alert(shop, name, size, label(status), url, image_url, size_price, new_product=True)
+                    cart_note, cart_buttons = None, None
+                    if shop == "bestsecret" and variants.get(size) and cart_enabled():
+                        ok, cart_note = try_add_to_cart(variants[size], url)
+                        cart_buttons = [("🛒 Przejdź do koszyka", CART_URL)] if ok else None
+                    send_product_alert(shop, name, size, label(status), url, image_url, size_price,
+                                       new_product=True, extra=cart_note, buttons=cart_buttons)
                 if shop == "zalando" and is_available(status):
                     cursor.execute(
                         "INSERT INTO cart_queue (product_id, size, status, url) VALUES (%s, %s, %s, %s)",
