@@ -2,6 +2,7 @@ import time
 
 from database import get_connection
 from scrapers.bestsecret.bestsecret import BestSecretScraper, ProductGone
+from scrapers.bestsecret.cart import CART_URL, is_enabled as cart_enabled, try_add_to_cart
 from services import health
 from services.notifier import send_product_alert, send_error_alert
 from services.statuses import label
@@ -40,6 +41,7 @@ def monitor_bestsecret(return_data=False):
             conn.close()
         return [] if return_data else None
 
+    atc_on = cart_enabled()
     results = []
     failed = 0
     last_error = None
@@ -76,9 +78,21 @@ def monitor_bestsecret(return_data=False):
                 (status, product["id"], size),
             )
             if is_available(status) and not is_available(previous):
+                # ATC przed alertem: liczy się każda sekunda, zanim ktoś inny
+                # złapie sztukę, która wróciła z cudzego koszyka.
+                cart_note = None
+                cart_ok = False
+                variant = fetched.get("variants", {}).get(size)
+                if atc_on and variant:
+                    cart_ok, cart_note = try_add_to_cart(variant, product["url"])
+                elif atc_on:
+                    cart_note = f"❌ ATC pominięte: brak kodu wariantu dla rozmiaru {size}"
+                    send_error_alert("BestSecret ATC", RuntimeError(f"{fetched['name']}: {cart_note}"))
                 send_product_alert(
                     "bestsecret", fetched["name"], size, label(status), product["url"],
                     fetched.get("image_url"), clean_price(fetched.get("price")),
+                    extra=cart_note,
+                    buttons=[("🛒 Przejdź do koszyka", CART_URL)] if cart_ok else None,
                 )
             results.append({
                 "product_id": fetched["product_id"],

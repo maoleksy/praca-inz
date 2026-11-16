@@ -4,6 +4,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from scrapers.answear.monitor import monitor_from_db
 from scrapers.zalando.monitor import monitor_zalando
 from scrapers.bestsecret.monitor import monitor_bestsecret
+from scrapers.bestsecret.cart import check_cart_session
 from services.notifier import send_error_alert
 
 
@@ -22,6 +23,8 @@ def start_scheduler():
     # wróć na wyższą wartość (np. 180-300s).
     scheduler.add_job(monitor_zalando, "interval", seconds=60)
     scheduler.add_job(monitor_bestsecret, "interval", seconds=60)
+    # Sesja konta do auto-ATC: martwy token ma wyjść od razu, nie przy restocku.
+    scheduler.add_job(check_cart_session, "interval", minutes=30)
     scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
     scheduler.start()
     return scheduler

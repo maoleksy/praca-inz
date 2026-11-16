@@ -213,8 +213,11 @@ class BestSecretScraper:
             for s in ((data.get("stock") or {}).get("styleArticleStocks") or [])
         }
         sizes = {}
+        variants = {}
         for v in product.get("variants") or []:
-            sizes[normalize_size(v["size"]["sizeText"])] = stock.get(v["code"], 0)
+            size = normalize_size(v["size"]["sizeText"])
+            sizes[size] = stock.get(v["code"], 0)
+            variants[size] = v["code"]
 
         media = product.get("media") or []
         designer = (product.get("designer") or {}).get("name") or ""
@@ -226,4 +229,5 @@ class BestSecretScraper:
             "image_url": media[0]["main"]["source"] if media else None,
             "price": price,
             "sizes": sizes,  # {"38": 1, "43": 5, ...} sztuki na stanie
+            "variants": variants,  # {"38": "40185018-003", ...} kody do ATC
         }

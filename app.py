@@ -16,6 +16,7 @@ from scrapers.bestsecret.bestsecret import (
     BestSecretScraper, ProductGone, normalize_size, parse_url as parse_bestsecret_url, save_tokens, token_status,
 )
 from scrapers.bestsecret.monitor import clean_price, monitor_bestsecret, status_for
+from scrapers.bestsecret.cart import CART_URL, cart_status, save_cart_settings, try_add_to_cart
 from scrapers.zalando.monitor import monitor_zalando
 from scrapers.zalando.zalando import ZalandoScraper
 from services import health
@@ -401,7 +402,12 @@ def test_alert():
         flash("Dodaj najpierw jakiś produkt.", "error")
         return redirect(url_for("index"))
     p = random.choice(rows)
-    send_product_alert(p["shop"], p["name"], "38", "Ostatnia sztuka", p["url"], p["image_url"], None, test=True)
+    cart_demo = p["shop"] == "bestsecret"
+    send_product_alert(
+        p["shop"], p["name"], "38", "Ostatnia sztuka", p["url"], p["image_url"], None, test=True,
+        extra="🛒 Dodano do koszyka (rezerwacja 20 min)" if cart_demo else None,
+        buttons=[("🛒 Przejdź do koszyka", CART_URL)] if cart_demo else None,
+    )
     flash(f"Wysłano testowy alert ({SHOPS.get(p['shop'], {}).get('name', p['shop'])}: {p['name']}).", "success")
     return redirect(request.referrer or url_for("index"))
 
@@ -410,10 +416,31 @@ def test_alert():
 def bestsecret_token():
     # Tokeny tylko zapisujemy, nigdy ich nie wyświetlamy.
     if request.method == "POST":
-        save_tokens(request.form.get("access_token"), request.form.get("refresh_token"))
-        flash("Zapisano token BestSecret.", "success")
+        form = request.form.get("form")
+        if form == "cart":
+            save_cart_settings(
+                request.form.get("cart_access_token"), request.form.get("cart_refresh_token"),
+                request.form.get("atc_hash"), enabled=request.form.get("enabled") == "1",
+            )
+            flash("Zapisano ustawienia koszyka BestSecret.", "success")
+        elif form == "cart_test":
+            try:
+                code, color = parse_bestsecret_url(request.form.get("test_url", ""))
+                product = BestSecretScraper(f"https://www.bestsecret.com/product.htm?code={code}&colorCode={color}", []).fetch()
+                size = normalize_size(request.form.get("test_size", "")) or next(
+                    (s for s, n in product["sizes"].items() if n > 0), None)
+                variant = product["variants"].get(size)
+                if not variant:
+                    raise ValueError(f"Nie ma rozmiaru {size or '(żaden na stanie)'}. Dostępne: {', '.join(product['variants'])}")
+                ok, note = try_add_to_cart(variant, request.form["test_url"], notify_errors=False)
+                flash(f"{product['name']} {size}: {note}", "success" if ok else "error")
+            except Exception as e:
+                flash(f"Test ATC: {e}", "error")
+        else:
+            save_tokens(request.form.get("access_token"), request.form.get("refresh_token"))
+            flash("Zapisano token BestSecret.", "success")
         return redirect(url_for("bestsecret_token"))
-    return render_template("bestsecret_token.html", token=token_status(), now=int(time.time()))
+    return render_template("bestsecret_token.html", token=token_status(), cart=cart_status(), now=int(time.time()))
 
 
 # ---------- API ----------

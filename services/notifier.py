@@ -35,12 +35,15 @@ def telegram(msg):
         print(f"[NOTIFIER] Telegram error: {e}")
 
 
-def telegram_photo(caption_html, image_url, button_url=None):
-    """Zdjęcie z podpisem i przyciskiem; bez zdjęcia albo gdy Telegram go nie
+def telegram_photo(caption_html, image_url, button_url=None, buttons=None):
+    """Zdjęcie z podpisem i przyciskami; bez zdjęcia albo gdy Telegram go nie
     pobierze, wysyła sam tekst."""
     if not BOT_TOKEN or not CHAT_ID:
         return
-    markup = {"inline_keyboard": [[{"text": "🛒 Otwórz w sklepie", "url": button_url}]]} if button_url else None
+    links = list(buttons or [])
+    if button_url:
+        links.append(("🔗 Otwórz w sklepie", button_url))
+    markup = {"inline_keyboard": [[{"text": t, "url": u} for t, u in links]]} if links else None
     base = f"https://api.telegram.org/bot{BOT_TOKEN}"
     try:
         if image_url:
@@ -58,7 +61,10 @@ def telegram_photo(caption_html, image_url, button_url=None):
         print(f"[NOTIFIER] Telegram error: {e}")
 
 
-def discord(msg=None, embeds=None):
+def discord(msg=None, embeds=None, buttons=None):
+    """buttons: [(etykieta, url), ...] jako przyciski-linki pod wiadomością.
+    Zwykły webhook przyjmuje je tylko z ?with_components=true; gdyby Discord
+    je odrzucił, wysyłamy wiadomość bez przycisków."""
     if not DISCORD_WEBHOOK:
         return
     payload = {"username": "Stock Monitor"}
@@ -67,6 +73,16 @@ def discord(msg=None, embeds=None):
     if embeds:
         payload["embeds"] = embeds
     try:
+        if buttons:
+            components = [{"type": 1, "components": [
+                {"type": 2, "style": 5, "label": label[:80], "url": url} for label, url in buttons[:5]
+            ]}]
+            sep = "&" if "?" in DISCORD_WEBHOOK else "?"
+            r = requests.post(f"{DISCORD_WEBHOOK}{sep}with_components=true",
+                              json={**payload, "components": components}, timeout=10)
+            if r.ok:
+                return
+            print(f"[NOTIFIER] Discord odrzucił przyciski ({r.status_code}): {r.text[:200]}")
         requests.post(DISCORD_WEBHOOK, json=payload, timeout=10)
     except Exception as e:
         print(f"[NOTIFIER] Discord error: {e}")
@@ -81,7 +97,7 @@ def send_alert(msg):
 
 
 def send_product_alert(shop, name, size, status, url, image_url=None, price=None,
-                       new_product=False, test=False):
+                       new_product=False, test=False, extra=None, buttons=None):
     """Alert o dostępności: embed ze zdjęciem na Discordzie, zdjęcie z
     podpisem i przyciskiem na Telegramie, wpis w historii alertów."""
     meta = SHOPS.get(shop, {"name": shop.title(), "color": 0x5865F2, "icon": None})
@@ -95,6 +111,8 @@ def send_product_alert(shop, name, size, status, url, image_url=None, price=None
     ]
     if price:
         fields.append({"name": "Cena", "value": price, "inline": True})
+    if extra:
+        fields.append({"name": "Koszyk", "value": extra[:1000], "inline": False})
 
     author = {"name": f"{meta['name']} · {headline}"}
     if meta["icon"]:
@@ -110,7 +128,7 @@ def send_product_alert(shop, name, size, status, url, image_url=None, price=None
     }
     if image_url:
         embed["image"] = {"url": image_url}
-    discord(embeds=[embed])
+    discord(embeds=[embed], buttons=list(buttons or []) + [("🔗 Otwórz produkt", url)])
 
     caption = (
         f"<b>{html.escape(headline)}</b> · {html.escape(meta['name'])}\n"
@@ -119,7 +137,7 @@ def send_product_alert(shop, name, size, status, url, image_url=None, price=None
         f"📦 Status: {html.escape(status)}"
         + (f"\n💰 Cena: {html.escape(price)}" if price else "")
     )
-    telegram_photo(caption, image_url, url)
+    telegram_photo(caption, image_url, url, buttons=buttons)
 
     if not test:
         _log_alert(shop, name, size, status, url, image_url, price)
